@@ -1,8 +1,11 @@
+# usage, from command line:
+# > ruby define-with-twitter.rb sometag
+# will print out a twitter-based definition
+# cobbled together from a search for #sometag
+
 require 'twitter_search'
 require 'histogram/array'
 require './lib/rubytagger_0.1.1/tagger.rb'
-
-puts "\n\n\n\n\n"
 
 def histogram_hash(array)
   output = Hash.new(0)
@@ -12,11 +15,11 @@ def histogram_hash(array)
   output
 end
 
-WORDS_TOO_COMMON = ["the","to", "have", "you", "a"]
+
 
 
 client = TwitterSearch::Client.new 'making a twitter-based word definer'
-tweets = client.query :q => "#JAYFK"
+tweets = client.query :q => "##{ARGV[0]}", :rpp => 50, :lang => 'en'
 
 words = tweets.map{|x| x.text.split(/\s+/)}.flatten
 
@@ -61,11 +64,11 @@ syntax_order = [
   [/JJ/, :optional],
   [/JJ/, :optional],
   [/NNS?/, :required],
-  [/VB./, :required],
+  [/VB/, :required],
   #[/IN/, :optional],
   [/DT/, :optional],
   [/JJ/, :optional],
-  [/JJ/, :optional],
+  #[/JJ/, :optional],
   [/NNS?/, :required],
 ]
 
@@ -77,18 +80,24 @@ syntax_order = [
 output = []
 tagger = Tagger.new('./lib/rubytagger_0.1.1/lexicon.txt')
 
+BORING_WORDS = ['was', 'com', 'an', 'is', 'con', 'da', 'van']
+def the_word_matches(pos_tag, chunk, word)
+  pos_tag =~ chunk[0] and 
+  word[0].size > 1 and 
+  !BORING_WORDS.include?(word[0]) and
+  word[0] !~ /^[A-Z]+$/ and # no acronyms!
+  true
+end
+
 syntax_order.each_with_index do |chunk, index|
-  puts "0"
   if index == syntax_order.size - 1 or chunk[1] == :required
     # must find the next word of that type
-    
-    puts "searching for #{chunk[0]} only"
-    
+      
     sorted_h.each_with_index do |word, word_index|
       pos_tag_array = tagger.getTags(word)
       pos_tag = pos_tag_array[0].to_s
-      if pos_tag =~ chunk[0]
-        output << word[0]
+      if the_word_matches(pos_tag, chunk, word)
+        output << word[0].downcase
         sorted_h.delete_at(word_index)
         break
       end
@@ -99,29 +108,28 @@ syntax_order.each_with_index do |chunk, index|
     # whicever comes first.
     rest_of_syntax_order = syntax_order.slice(index .. syntax_order.size - 1)
     next_required = rest_of_syntax_order.select{|x| x[1] == :required}[0]
-    
-    puts "searching for a #{chunk[0]} or a #{next_required[0]}"
-    
+      
     sorted_h.each_with_index do |word, word_index|
       pos_tag_array = tagger.getTags(word)
       pos_tag = pos_tag_array[0].to_s
-      if pos_tag =~ chunk[0]
-        puts "1"
-        output << word[0]
+      if the_word_matches(pos_tag, chunk, word)
+        output << word[0].downcase
         sorted_h.delete_at(word_index)
         break
       end
-      if pos_tag =~ next_required[0]
-        puts "2"
-        output << word[0]
+      if the_word_matches(pos_tag, next_required, word)
+        output << word[0].downcase
         sorted_h.delete_at(word_index)
         break
       end
     end
-    puts "3"
   end
-  puts "4"
-  puts "chunk = #{chunk.inspect}"
 end
 
-puts "output = #{output.join(' ')}"
+puts "definition of #{ARGV[0]}: '#{output.join(' ')}'"
+
+puts "\n\n"
+
+# dan taub:
+# read emotional impact of words
+
